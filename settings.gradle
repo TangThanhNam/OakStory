@@ -1,0 +1,13 @@
+include 'core'
+include 'lwjgl3'
+
+// The Android module is only included when an Android SDK is available
+// (Android Studio writes sdk.dir into local.properties, or ANDROID_HOME is set).
+// This lets the desktop project build on machines without the Android SDK while
+// still building the APK normally inside Android Studio.
+def hasSdk = System.getenv('ANDROID_HOME') != null ||
+        System.getenv('ANDROID_SDK_ROOT') != null ||
+        file('local.properties').exists()
+if (hasSdk) {
+    include 'android'
+}

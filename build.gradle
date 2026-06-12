@@ -1,0 +1,26 @@
+// Root build file for OakStory.
+// Versions are kept here so every module uses the same libGDX release.
+
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.2'
+    }
+}
+
+allprojects {
+    ext {
+        appName = 'OakStory'
+        gdxVersion = '1.13.1'
+    }
+
+    repositories {
+        mavenCentral()
+        google()
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+    }
+}

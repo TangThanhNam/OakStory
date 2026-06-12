@@ -1,0 +1,11 @@
+apply plugin: 'java-library'
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+sourceSets.main.java.srcDirs = ['src/']
+sourceSets.main.resources.srcDirs = ['../assets']
+
+dependencies {
+    api "com.badlogicgames.gdx:gdx:$gdxVersion"
+}
