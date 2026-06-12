@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local tooling (JDK, IDE)
+/tools/
+*.iml
+.idea/
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Raw downloaded asset packs (we commit only the processed assets under android/assets)
+/rawassets/
+
+# Android
+*.apk
+*.ap_
+*.dex
+captures/
