@@ -50,12 +50,13 @@ public class Player implements Disposable {
         runTex = new Texture(Gdx.files.internal("character/Run.png"));
         jumpTex = new Texture(Gdx.files.internal("character/Jump.png"));
 
-        idleAnim = new Animation<>(0.18f, firstRow(idleTex, 64, 80));
+        // Note: the sheets use different frame sizes.
+        idleAnim = new Animation<>(0.18f, firstRow(idleTex, 64, 80)); // 4 frames
         idleAnim.setPlayMode(Animation.PlayMode.LOOP);
-        runAnim = new Animation<>(0.05f, firstRow(runTex, 64, 80));
+        runAnim = new Animation<>(0.06f, firstRow(runTex, 80, 80));   // 8 frames
         runAnim.setPlayMode(Animation.PlayMode.LOOP);
 
-        TextureRegion[] jumpFrames = firstRow(jumpTex, 64, 64);
+        TextureRegion[] jumpFrames = firstRow(jumpTex, 64, 64);       // 15 frames
         jumpFrame = jumpFrames[Math.min(4, jumpFrames.length - 1)];
     }
 
@@ -122,23 +123,27 @@ public class Player implements Disposable {
     }
 
     public void render(Batch batch) {
+        // Per-state frame size, the character's content-centre x within the frame,
+        // and how far the feet sit above the frame bottom. Aligning on the content
+        // centre keeps the character from shifting horizontally between states.
         TextureRegion frame;
-        float frameH, feetFromBottom;
+        float frameW, frameH, contentCx, feetFromBottom;
         if (!grounded) {
-            frame = jumpFrame; frameH = 64; feetFromBottom = 2;
+            frame = jumpFrame; frameW = 64; frameH = 64; contentCx = 21; feetFromBottom = 5;
         } else if (vx != 0) {
-            frame = runAnim.getKeyFrame(stateTime); frameH = 80; feetFromBottom = 18;
+            frame = runAnim.getKeyFrame(stateTime); frameW = 80; frameH = 80; contentCx = 44; feetFromBottom = 18;
         } else {
-            frame = idleAnim.getKeyFrame(stateTime); frameH = 80; feetFromBottom = 18;
+            frame = idleAnim.getKeyFrame(stateTime); frameW = 64; frameH = 80; contentCx = 38; feetFromBottom = 18;
         }
 
-        float frameW = 64;
-        float drawX = x + WIDTH / 2f - frameW / 2f;
+        float boxCentre = x + WIDTH / 2f;
         float drawY = y - feetFromBottom;
         if (facingRight) {
+            float drawX = boxCentre - contentCx;
             batch.draw(frame, drawX, drawY, frameW, frameH);
         } else {
-            // Flip horizontally by drawing with a negative width.
+            // Mirror around the content centre by drawing with a negative width.
+            float drawX = boxCentre - (frameW - contentCx);
             batch.draw(frame, drawX + frameW, drawY, -frameW, frameH);
         }
     }
