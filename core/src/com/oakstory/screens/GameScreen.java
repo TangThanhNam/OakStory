@@ -19,9 +19,9 @@ import com.oakstory.OakStoryGame;
  */
 public class GameScreen extends ScreenAdapter {
 
-    /** Visible area in pixels. Roughly 16 tiles wide with a 9:16 portrait ratio. */
-    private static final float VIEW_WIDTH = 256f;
-    private static final float VIEW_HEIGHT = 455f;
+    /** Visible area in pixels. 30 tiles wide with a 16:9 landscape ratio. */
+    private static final float VIEW_WIDTH = 480f;
+    private static final float VIEW_HEIGHT = 270f;
 
     private final OakStoryGame game;
     private final OrthographicCamera camera;
