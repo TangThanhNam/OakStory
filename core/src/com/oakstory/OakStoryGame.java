@@ -1,21 +1,42 @@
 package com.oakstory;
 
-import com.badlogic.gdx.ApplicationAdapter;
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.Game;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.oakstory.screens.TitleScreen;
 
 /**
- * Entry point of the OakStory game.
+ * Entry point of OakStory.
  *
- * <p>For now this just clears the screen to a forest-green colour so we can
- * confirm the libGDX project builds and runs on both desktop and Android.
- * Screens (title, gameplay, game-over) are added in later steps.</p>
+ * <p>Extends {@link Game} so the project can switch between screens (title,
+ * gameplay, credits, game-over). A single {@link SpriteBatch} and
+ * {@link BitmapFont} are created here and shared by every screen so we are not
+ * allocating GPU resources per screen.</p>
  */
-public class OakStoryGame extends ApplicationAdapter {
+public class OakStoryGame extends Game {
+
+    /** Virtual world size used by the UI screens; gives consistent layout across resolutions. */
+    public static final float WORLD_WIDTH = 480f;
+    public static final float WORLD_HEIGHT = 800f;
+
+    public SpriteBatch batch;
+    public BitmapFont font;
 
     @Override
-    public void render() {
-        Gdx.gl.glClearColor(0.42f, 0.60f, 0.36f, 1f);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+    public void create() {
+        batch = new SpriteBatch();
+        // libGDX ships a default 15px bitmap font, so no asset file is needed yet.
+        font = new BitmapFont();
+        font.setUseIntegerPositions(false);
+        setScreen(new TitleScreen(this));
+    }
+
+    @Override
+    public void dispose() {
+        if (getScreen() != null) {
+            getScreen().dispose();
+        }
+        batch.dispose();
+        font.dispose();
     }
 }
