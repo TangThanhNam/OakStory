@@ -15,9 +15,9 @@ import com.oakstory.screens.TitleScreen;
  */
 public class OakStoryGame extends Game {
 
-    /** Virtual world size used by the UI screens; gives consistent layout across resolutions. */
+    /** Virtual world size used by the UI screens (landscape 16:9); consistent layout across resolutions. */
     public static final float WORLD_WIDTH = 480f;
-    public static final float WORLD_HEIGHT = 800f;
+    public static final float WORLD_HEIGHT = 270f;
 
     public SpriteBatch batch;
     public BitmapFont font;

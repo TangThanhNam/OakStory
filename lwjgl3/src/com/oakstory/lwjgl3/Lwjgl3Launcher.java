@@ -14,8 +14,8 @@ public class Lwjgl3Launcher {
     private static Lwjgl3Application createApplication() {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
         config.setTitle("OakStory");
-        // Portrait-ish window mirroring the Pixel 2 target while developing.
-        config.setWindowedMode(480, 800);
+        // Landscape window (16:9) for the side-scrolling gameplay.
+        config.setWindowedMode(960, 540);
         config.useVsync(true);
         config.setForegroundFPS(60);
         return new Lwjgl3Application(new OakStoryGame(), config);
