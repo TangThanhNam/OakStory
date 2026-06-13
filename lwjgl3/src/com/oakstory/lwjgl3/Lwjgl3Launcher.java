@@ -15,7 +15,7 @@ public class Lwjgl3Launcher {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
         config.setTitle("OakStory");
         // Landscape window (16:9) for the side-scrolling gameplay.
-        config.setWindowedMode(960, 540);
+        config.setWindowedMode(1280, 720);
         config.useVsync(true);
         config.setForegroundFPS(60);
         return new Lwjgl3Application(new OakStoryGame(), config);
