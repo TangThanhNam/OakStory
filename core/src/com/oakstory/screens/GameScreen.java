@@ -9,26 +9,35 @@ import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.oakstory.OakStoryGame;
 import com.oakstory.entities.Player;
+import com.oakstory.items.Icons;
+import com.oakstory.items.Inventory;
+import com.oakstory.items.Pickup;
+import com.oakstory.items.ResourceType;
 
 /**
- * The gameplay screen. Loads the Level 1 Tiled map, runs the player and follows
- * the player with the camera. The player collides with the "ground" tile layer.
+ * The gameplay screen. Loads the Level 1 Tiled map, runs the player, lets the
+ * player collect resource pickups and shows the inventory HUD. The crafting
+ * menu and level transition are added on top of this.
  */
 public class GameScreen extends ScreenAdapter {
 
-    /** Visible area in pixels. 30 tiles wide with a 16:9 landscape ratio. */
-    private static final float VIEW_WIDTH = 480f;
-    private static final float VIEW_HEIGHT = 270f;
+    /** Visible area in pixels. 40 tiles wide with a 16:9 landscape ratio. */
+    private static final float VIEW_WIDTH = 640f;
+    private static final float VIEW_HEIGHT = 360f;
     private static final float TILE = 16f;
+    private static final int KEY_ICON_GID = 516;
 
     private final OakStoryGame game;
     private final OrthographicCamera camera;
     private final Viewport viewport;
+    private final OrthographicCamera hudCamera;
+    private final Viewport hudViewport;
 
     private final TiledMap map;
     private final OrthogonalTiledMapRenderer mapRenderer;
@@ -38,11 +47,17 @@ public class GameScreen extends ScreenAdapter {
     private final Player player;
     private final float spawnX, spawnY;
 
+    private final Icons icons;
+    private final Inventory inventory = new Inventory();
+    private final Array<Pickup> pickups = new Array<>();
+
     public GameScreen(OakStoryGame game) {
         this.game = game;
 
         camera = new OrthographicCamera();
         viewport = new FitViewport(VIEW_WIDTH, VIEW_HEIGHT, camera);
+        hudCamera = new OrthographicCamera();
+        hudViewport = new FitViewport(VIEW_WIDTH, VIEW_HEIGHT, hudCamera);
 
         map = new TmxMapLoader().load("maps/forest.tmx");
         mapRenderer = new OrthogonalTiledMapRenderer(map, game.batch);
@@ -51,8 +66,24 @@ public class GameScreen extends ScreenAdapter {
         mapHeightPx = groundLayer.getHeight() * TILE;
 
         spawnX = 2 * TILE;
-        spawnY = 6 * TILE; // a little above the ground; falls and lands
+        spawnY = 6 * TILE;
         player = new Player(spawnX, spawnY, mapWidthPx);
+
+        icons = new Icons();
+        spawnPickups();
+    }
+
+    /** Scatters resources across the ground and platforms. */
+    private void spawnPickups() {
+        pickups.add(new Pickup(ResourceType.MUSHROOM, 96, 64));
+        pickups.add(new Pickup(ResourceType.HERB, 144, 64));
+        pickups.add(new Pickup(ResourceType.FLOWER, 192, 128));   // platform
+        pickups.add(new Pickup(ResourceType.HERB, 240, 64));
+        pickups.add(new Pickup(ResourceType.MUSHROOM, 416, 192)); // high platform
+        pickups.add(new Pickup(ResourceType.FLOWER, 496, 112));   // platform
+        pickups.add(new Pickup(ResourceType.HERB, 704, 64));
+        pickups.add(new Pickup(ResourceType.MUSHROOM, 800, 64));
+        pickups.add(new Pickup(ResourceType.HERB, 832, 64));
     }
 
     @Override
@@ -66,15 +97,25 @@ public class GameScreen extends ScreenAdapter {
 
         update(delta);
 
-        ScreenUtils.clear(0.45f, 0.70f, 0.86f, 1f); // sky blue
+        ScreenUtils.clear(0.45f, 0.70f, 0.86f, 1f);
         camera.update();
-
         mapRenderer.setView(camera);
         mapRenderer.render();
 
+        // World-space sprites.
         game.batch.setProjectionMatrix(camera.combined);
         game.batch.begin();
+        for (Pickup p : pickups) {
+            if (!p.collected) game.batch.draw(icons.get(p.type.gid), p.x, p.y, Pickup.SIZE, Pickup.SIZE);
+        }
         player.render(game.batch);
+        game.batch.end();
+
+        // HUD.
+        hudCamera.update();
+        game.batch.setProjectionMatrix(hudCamera.combined);
+        game.batch.begin();
+        drawHud();
         game.batch.end();
     }
 
@@ -85,7 +126,6 @@ public class GameScreen extends ScreenAdapter {
                 || Gdx.input.isKeyJustPressed(Input.Keys.UP)
                 || Gdx.input.isKeyJustPressed(Input.Keys.W);
 
-        // Touch controls (Android): left third = left, right third = right, middle = jump.
         float screenW = Gdx.graphics.getWidth();
         for (int p = 0; p < 2; p++) {
             if (Gdx.input.isTouched(p)) {
@@ -101,21 +141,49 @@ public class GameScreen extends ScreenAdapter {
 
         player.update(delta, groundLayer, left, right, jump);
 
-        // Fell into a pit -> respawn (full death/restart handled in a later step).
+        // Collect any pickup the player overlaps.
+        for (Pickup p : pickups) {
+            if (p.collected) continue;
+            if (overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, p.x, p.y, Pickup.SIZE, Pickup.SIZE)) {
+                p.collected = true;
+                inventory.add(p.type);
+            }
+        }
+
         if (player.getFeetY() < -Player.HEIGHT) {
             player.x = spawnX;
             player.y = spawnY;
         }
 
-        // Camera follows the player, clamped to the map bounds.
         float camX = MathUtils.clamp(player.x, VIEW_WIDTH / 2f, mapWidthPx - VIEW_WIDTH / 2f);
         float camY = MathUtils.clamp(player.y, VIEW_HEIGHT / 2f, mapHeightPx - VIEW_HEIGHT / 2f);
         camera.position.set(camX, camY, 0);
     }
 
+    private void drawHud() {
+        float pad = 8, iconSize = 20, y = VIEW_HEIGHT - pad - iconSize, x = pad;
+        for (ResourceType t : ResourceType.values()) {
+            game.batch.draw(icons.get(t.gid), x, y, iconSize, iconSize);
+            game.font.getData().setScale(0.9f);
+            game.font.draw(game.batch, "x" + inventory.count(t), x + iconSize + 2, y + iconSize - 4);
+            x += iconSize + 36;
+        }
+        if (inventory.hasKey()) {
+            game.batch.draw(icons.get(KEY_ICON_GID), x, y, iconSize, iconSize);
+        }
+        game.font.getData().setScale(0.8f);
+        game.font.draw(game.batch, "C: craft", VIEW_WIDTH - 58, 16);
+    }
+
+    private static boolean overlaps(float ax, float ay, float aw, float ah,
+                                    float bx, float by, float bw, float bh) {
+        return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
     @Override
     public void resize(int width, int height) {
         viewport.update(width, height, false);
+        hudViewport.update(width, height, true);
     }
 
     @Override
@@ -123,5 +191,6 @@ public class GameScreen extends ScreenAdapter {
         map.dispose();
         mapRenderer.dispose();
         player.dispose();
+        icons.dispose();
     }
 }
