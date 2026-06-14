@@ -22,6 +22,7 @@ public class CreditsScreen extends MenuScreen {
                 || Gdx.input.justTouched()) {
             game.setScreen(new TitleScreen(game));
             dispose();
+            return;
         }
 
         ScreenUtils.clear(0.10f, 0.16f, 0.11f, 1f);
@@ -34,7 +35,7 @@ public class CreditsScreen extends MenuScreen {
         drawCentered("Forest art: anokolisa (itch.io, free)", h * 0.56f, 0.9f);
         drawCentered("Sound & music: see docs/ASSETS.md", h * 0.50f, 0.9f);
         drawCentered("Made by the OakStory team", h * 0.40f, 0.9f);
-        drawCentered("Tap or press ESC to go back", h * 0.20f, 0.9f);
+        drawCentered("Tap anywhere to go back", h * 0.20f, 0.9f);
         game.batch.end();
     }
 }

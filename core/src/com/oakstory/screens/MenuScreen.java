@@ -39,6 +39,13 @@ abstract class MenuScreen extends ScreenAdapter {
         game.font.draw(game.batch, text, (OakStoryGame.WORLD_WIDTH - layout.width) / 2f, y);
     }
 
+    /** Draws text centred on a point, e.g. inside a button. */
+    protected void drawCenteredAt(String text, float cx, float cy, float scale) {
+        game.font.getData().setScale(scale);
+        layout.setText(game.font, text);
+        game.font.draw(game.batch, text, cx - layout.width / 2f, cy + layout.height / 2f);
+    }
+
     @Override
     public void resize(int width, int height) {
         viewport.update(width, height, true);
