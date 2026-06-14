@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
@@ -19,6 +20,7 @@ import com.oakstory.items.Icons;
 import com.oakstory.items.Inventory;
 import com.oakstory.items.Pickup;
 import com.oakstory.items.ResourceType;
+import com.oakstory.ui.TouchPad;
 
 /**
  * The gameplay screen. Loads the Level 1 Tiled map, runs the player, lets the
@@ -50,6 +52,9 @@ public class GameScreen extends ScreenAdapter {
     private final Icons icons;
     private final Inventory inventory = new Inventory();
     private final Array<Pickup> pickups = new Array<>();
+
+    private final ShapeRenderer shapes = new ShapeRenderer();
+    private final TouchPad touchPad = new TouchPad();
 
     public GameScreen(OakStoryGame game) {
         this.game = game;
@@ -111,11 +116,15 @@ public class GameScreen extends ScreenAdapter {
         player.render(game.batch);
         game.batch.end();
 
-        // HUD.
+        // HUD + on-screen controls.
         hudCamera.update();
+        shapes.setProjectionMatrix(hudCamera.combined);
+        touchPad.drawButtons(shapes);
+
         game.batch.setProjectionMatrix(hudCamera.combined);
         game.batch.begin();
         drawHud();
+        touchPad.drawLabels(game.batch, game.font);
         game.batch.end();
     }
 
@@ -126,18 +135,11 @@ public class GameScreen extends ScreenAdapter {
                 || Gdx.input.isKeyJustPressed(Input.Keys.UP)
                 || Gdx.input.isKeyJustPressed(Input.Keys.W);
 
-        float screenW = Gdx.graphics.getWidth();
-        for (int p = 0; p < 2; p++) {
-            if (Gdx.input.isTouched(p)) {
-                float tx = Gdx.input.getX(p);
-                if (tx < screenW / 3f) left = true;
-                else if (tx > screenW * 2f / 3f) right = true;
-            }
-        }
-        if (Gdx.input.justTouched()) {
-            float tx = Gdx.input.getX();
-            if (tx >= screenW / 3f && tx <= screenW * 2f / 3f) jump = true;
-        }
+        // On-screen touch controls (also clickable with the mouse on desktop).
+        touchPad.poll(hudViewport);
+        left |= touchPad.left();
+        right |= touchPad.right();
+        jump |= touchPad.jumpJustPressed();
 
         player.update(delta, groundLayer, left, right, jump);
 
@@ -192,5 +194,6 @@ public class GameScreen extends ScreenAdapter {
         mapRenderer.dispose();
         player.dispose();
         icons.dispose();
+        shapes.dispose();
     }
 }
