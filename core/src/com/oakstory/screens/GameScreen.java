@@ -3,13 +3,17 @@ package com.oakstory.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -20,6 +24,7 @@ import com.oakstory.items.Icons;
 import com.oakstory.items.Inventory;
 import com.oakstory.items.Pickup;
 import com.oakstory.items.ResourceType;
+import com.oakstory.ui.CraftingMenu;
 import com.oakstory.ui.TouchPad;
 
 /**
@@ -55,6 +60,10 @@ public class GameScreen extends ScreenAdapter {
 
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final TouchPad touchPad = new TouchPad();
+    private final CraftingMenu menu = new CraftingMenu();
+    private final Rectangle craftOpenBtn = new Rectangle(544, 320, 88, 30);
+    private final Vector3 tmp = new Vector3();
+    private final GlyphLayout layout = new GlyphLayout();
 
     public GameScreen(OakStoryGame game) {
         this.game = game;
@@ -95,10 +104,15 @@ public class GameScreen extends ScreenAdapter {
     public void render(float delta) {
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
                 || Gdx.input.isKeyJustPressed(Input.Keys.BACK)) {
-            game.setScreen(new TitleScreen(game));
-            dispose();
-            return;
+            if (menu.isOpen()) {
+                menu.close();
+            } else {
+                game.setScreen(new TitleScreen(game));
+                dispose();
+                return;
+            }
         }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.C)) menu.toggle();
 
         update(delta);
 
@@ -116,19 +130,36 @@ public class GameScreen extends ScreenAdapter {
         player.render(game.batch);
         game.batch.end();
 
-        // HUD + on-screen controls.
+        // HUD + on-screen controls (or the crafting menu when it is open).
         hudCamera.update();
         shapes.setProjectionMatrix(hudCamera.combined);
-        touchPad.drawButtons(shapes);
-
         game.batch.setProjectionMatrix(hudCamera.combined);
-        game.batch.begin();
-        drawHud();
-        touchPad.drawLabels(game.batch, game.font);
-        game.batch.end();
+
+        if (menu.isOpen()) {
+            menu.render(shapes, game.batch, game.font, icons, inventory);
+        } else {
+            touchPad.drawButtons(shapes);
+            drawCraftButtonBg();
+            game.batch.begin();
+            drawHud();
+            touchPad.drawLabels(game.batch, game.font);
+            drawCraftButtonLabel();
+            game.batch.end();
+        }
     }
 
     private void update(float delta) {
+        // When the crafting menu is open, gameplay freezes and we only read the menu.
+        if (menu.isOpen()) {
+            if (Gdx.input.justTouched()) {
+                tmp.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+                hudViewport.unproject(tmp);
+                menu.handleTap(tmp.x, tmp.y, inventory);
+            }
+            menu.handleKeys(inventory);
+            return;
+        }
+
         boolean left = Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A);
         boolean right = Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D);
         boolean jump = Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
@@ -140,6 +171,13 @@ public class GameScreen extends ScreenAdapter {
         left |= touchPad.left();
         right |= touchPad.right();
         jump |= touchPad.jumpJustPressed();
+
+        // Tapping the CRAFT button opens the menu.
+        if (Gdx.input.justTouched()) {
+            tmp.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            hudViewport.unproject(tmp);
+            if (craftOpenBtn.contains(tmp.x, tmp.y)) menu.open();
+        }
 
         player.update(delta, groundLayer, left, right, jump);
 
@@ -173,8 +211,22 @@ public class GameScreen extends ScreenAdapter {
         if (inventory.hasKey()) {
             game.batch.draw(icons.get(KEY_ICON_GID), x, y, iconSize, iconSize);
         }
-        game.font.getData().setScale(0.8f);
-        game.font.draw(game.batch, "C: craft", VIEW_WIDTH - 58, 16);
+    }
+
+    private void drawCraftButtonBg() {
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.20f, 0.45f, 0.55f, 0.85f);
+        shapes.rect(craftOpenBtn.x, craftOpenBtn.y, craftOpenBtn.width, craftOpenBtn.height);
+        shapes.end();
+    }
+
+    private void drawCraftButtonLabel() {
+        game.font.getData().setScale(0.9f);
+        layout.setText(game.font, "CRAFT");
+        game.font.draw(game.batch, "CRAFT",
+                craftOpenBtn.x + craftOpenBtn.width / 2f - layout.width / 2f,
+                craftOpenBtn.y + craftOpenBtn.height / 2f + layout.height / 2f);
     }
 
     private static boolean overlaps(float ax, float ay, float aw, float ah,
