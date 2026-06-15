@@ -46,6 +46,7 @@ public class GameScreen extends ScreenAdapter {
     private static final int CHEST_GID = 444; // top-left tile of the 2x2 chest
     private static final float CHEST_SIZE = 32f;
     private static final float DOOR_W = 31f, DOOR_H = 47f;
+    private static final int START_LIVES = 3;
 
     private final OakStoryGame game;
     private final int level;
@@ -83,6 +84,7 @@ public class GameScreen extends ScreenAdapter {
     private boolean chestOpened;
     private boolean showKeyHint;
     private boolean lockedSoundPlayed; // so the "locked" sound fires once per visit, not every frame
+    private int lives = START_LIVES;
 
     public GameScreen(OakStoryGame game, int level) {
         this.game = game;
@@ -267,8 +269,16 @@ public class GameScreen extends ScreenAdapter {
             return true;
         }
 
+        // Falling into a pit costs a life. At zero lives the run ends.
         if (player.getFeetY() < -Player.HEIGHT) {
             Audio.playHurt();
+            lives--;
+            if (lives <= 0) {
+                Audio.playGameOver();
+                game.setScreen(new GameOverScreen(game, level));
+                dispose();
+                return true;
+            }
             player.x = spawnX;
             player.y = spawnY;
         }
@@ -290,6 +300,11 @@ public class GameScreen extends ScreenAdapter {
         if (inventory.hasKey()) {
             game.batch.draw(icons.get(KEY_ICON_GID), x, y, iconSize, iconSize);
         }
+
+        // Lives, shown top-centre so they stay clear of the resource and CRAFT HUD.
+        game.font.getData().setScale(1.0f);
+        layout.setText(game.font, "Lives x" + lives);
+        game.font.draw(game.batch, "Lives x" + lives, VIEW_WIDTH / 2f - layout.width / 2f, VIEW_HEIGHT - 8);
     }
 
     private void drawCenteredHud(String text, float y) {
