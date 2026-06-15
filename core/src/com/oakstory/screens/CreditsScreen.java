@@ -33,7 +33,7 @@ public class CreditsScreen extends MenuScreen {
         drawCentered("Credits", h * 0.80f, 2.0f);
         drawCentered("Game engine: libGDX (Apache 2.0)", h * 0.62f, 0.9f);
         drawCentered("Forest art: anokolisa (itch.io, free)", h * 0.56f, 0.9f);
-        drawCentered("Sound & music: see docs/ASSETS.md", h * 0.50f, 0.9f);
+        drawCentered("Sound & music: Kenney.nl (CC0)", h * 0.50f, 0.9f);
         drawCentered("Made by the OakStory team", h * 0.40f, 0.9f);
         drawCentered("Tap anywhere to go back", h * 0.20f, 0.9f);
         game.batch.end();
