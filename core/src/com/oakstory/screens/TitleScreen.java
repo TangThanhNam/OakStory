@@ -49,7 +49,7 @@ public class TitleScreen extends MenuScreen {
     /** @return true if a button was pressed and a new screen was set (stop rendering this one). */
     private boolean handleInput() {
         if (tapped(playBtn) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            game.setScreen(new GameScreen(game));
+            game.setScreen(new GameScreen(game, 1));
             dispose();
             return true;
         }

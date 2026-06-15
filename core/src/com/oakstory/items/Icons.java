@@ -22,6 +22,13 @@ public class Icons implements Disposable {
         sheet = new Texture(Gdx.files.internal("tiles/Tiles.png"));
     }
 
+    /** Returns a region spanning tilesW x tilesH tiles, anchored at the given GID's tile. */
+    public TextureRegion block(int gid, int tilesW, int tilesH) {
+        int index = gid - 1;
+        return new TextureRegion(sheet,
+                (index % COLUMNS) * TILE, (index / COLUMNS) * TILE, tilesW * TILE, tilesH * TILE);
+    }
+
     /** Returns the icon region for the given tile GID. */
     public TextureRegion get(int gid) {
         TextureRegion region = cache.get(gid);
