@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
+import com.oakstory.audio.Audio;
 import com.oakstory.items.Icons;
 import com.oakstory.items.Inventory;
 
@@ -46,19 +47,26 @@ public class CraftingMenu {
 
     /** Number-key shortcuts: 1 = Key, 2 = Bridge. */
     public void handleKeys(Inventory inv) {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) inv.craftKey();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) inv.craftBridge();
+        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) craftSound(inv.craftKey());
+        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) craftSound(inv.craftBridge());
     }
 
     /** Handles a tap at HUD coordinates (x, y). */
     public void handleTap(float x, float y, Inventory inv) {
         if (closeBtn.contains(x, y)) {
+            Audio.playLocked();
             open = false;
         } else if (keyBtn.contains(x, y)) {
-            inv.craftKey();
+            craftSound(inv.craftKey());
         } else if (bridgeBtn.contains(x, y)) {
-            inv.craftBridge();
+            craftSound(inv.craftBridge());
         }
+    }
+
+    /** Plays a confirming sound on a successful craft, a denied sound otherwise. */
+    private void craftSound(boolean crafted) {
+        if (crafted) Audio.playCraft();
+        else Audio.playLocked();
     }
 
     public void render(ShapeRenderer shapes, Batch batch, BitmapFont font, Icons icons, Inventory inv) {

@@ -21,6 +21,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.oakstory.OakStoryGame;
+import com.oakstory.audio.Audio;
 import com.oakstory.entities.Player;
 import com.oakstory.items.Icons;
 import com.oakstory.items.Inventory;
@@ -81,6 +82,7 @@ public class GameScreen extends ScreenAdapter {
     private final float doorX, doorY;
     private boolean chestOpened;
     private boolean showKeyHint;
+    private boolean lockedSoundPlayed; // so the "locked" sound fires once per visit, not every frame
 
     public GameScreen(OakStoryGame game, int level) {
         this.game = game;
@@ -119,6 +121,8 @@ public class GameScreen extends ScreenAdapter {
         doorTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         doorX = goalX + 36;
         doorY = 4 * TILE;
+
+        Audio.playTheme(level); // forest or cave loop; switches automatically on the level-2 transition
     }
 
     private void spawnForestPickups() {
@@ -146,6 +150,7 @@ public class GameScreen extends ScreenAdapter {
             if (menu.isOpen()) {
                 menu.close();
             } else {
+                Audio.stopMusic();
                 game.setScreen(new TitleScreen(game));
                 dispose();
                 return;
@@ -222,12 +227,14 @@ public class GameScreen extends ScreenAdapter {
         }
 
         player.update(delta, groundLayer, left, right, jump);
+        if (player.justJumped) Audio.playJump();
 
         for (Pickup p : pickups) {
             if (p.collected) continue;
             if (overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, p.x, p.y, Pickup.SIZE, Pickup.SIZE)) {
                 p.collected = true;
                 inventory.add(p.type);
+                Audio.playPickup();
             }
         }
 
@@ -237,14 +244,22 @@ public class GameScreen extends ScreenAdapter {
         boolean atChest = overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, goalX, goalY, CHEST_SIZE, CHEST_SIZE);
         if (finalLevel) {
             if (atChest) {
+                Audio.playWin();
                 game.setScreen(new WinScreen(game));
                 dispose();
                 return true;
             }
         } else if (!chestOpened) {
             if (atChest) {
-                if (inventory.hasKey()) chestOpened = true;
-                else showKeyHint = true;
+                if (inventory.hasKey()) {
+                    chestOpened = true;
+                    Audio.playDoor();
+                } else {
+                    showKeyHint = true;
+                    if (!lockedSoundPlayed) { Audio.playLocked(); lockedSoundPlayed = true; }
+                }
+            } else {
+                lockedSoundPlayed = false; // re-arm once the player steps away from the chest
             }
         } else if (overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, doorX, doorY, DOOR_W, DOOR_H)) {
             game.setScreen(new GameScreen(game, 2));
@@ -253,6 +268,7 @@ public class GameScreen extends ScreenAdapter {
         }
 
         if (player.getFeetY() < -Player.HEIGHT) {
+            Audio.playHurt();
             player.x = spawnX;
             player.y = spawnY;
         }

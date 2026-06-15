@@ -31,6 +31,8 @@ public class Player implements Disposable {
     public static final float HEIGHT = 30f;
 
     public float x, y;
+    /** True for the single frame in which a jump was launched (for the jump sound). */
+    public boolean justJumped;
     private float vx, vy;
     private boolean grounded;
     private boolean facingRight = true;
@@ -79,9 +81,10 @@ public class Player implements Disposable {
         stateTime += dt;
 
         vx = 0;
+        justJumped = false;
         if (left) { vx = -MOVE_SPEED; facingRight = false; }
         if (right) { vx = MOVE_SPEED; facingRight = true; }
-        if (jump && grounded) { vy = JUMP_SPEED; grounded = false; }
+        if (jump && grounded) { vy = JUMP_SPEED; grounded = false; justJumped = true; }
 
         vy += GRAVITY * dt;
         if (vy < -MAX_FALL) vy = -MAX_FALL;

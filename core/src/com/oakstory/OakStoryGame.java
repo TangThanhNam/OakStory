@@ -3,6 +3,7 @@ package com.oakstory;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.oakstory.audio.Audio;
 import com.oakstory.screens.TitleScreen;
 
 /**
@@ -28,6 +29,7 @@ public class OakStoryGame extends Game {
         // libGDX ships a default 15px bitmap font, so no asset file is needed yet.
         font = new BitmapFont();
         font.setUseIntegerPositions(false);
+        Audio.load();
         setScreen(new TitleScreen(this));
     }
 
@@ -38,5 +40,6 @@ public class OakStoryGame extends Game {
         }
         batch.dispose();
         font.dispose();
+        Audio.dispose();
     }
 }
