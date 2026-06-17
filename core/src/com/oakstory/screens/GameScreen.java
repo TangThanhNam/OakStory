@@ -3,6 +3,7 @@ package com.oakstory.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -75,6 +76,14 @@ public class GameScreen extends ScreenAdapter {
     private final Animation<TextureRegion> boarWalk, boarVanish;
     private final TextureRegion chest;
 
+    private final Texture skyTex;
+    private final Texture[] treeFar, treeNear; // parallax background tree layers (forest)
+    private final Texture[] caveRocks;         // stalagmites/stalactites (cave)
+    private final Color caveTop = new Color(0.05f, 0.04f, 0.08f, 1f);
+    private final Color caveBottom = new Color(0.17f, 0.12f, 0.20f, 1f);
+    private final Color mtnFar = new Color(0.52f, 0.64f, 0.64f, 1f);  // hazy distant range
+    private final Color mtnNear = new Color(0.34f, 0.47f, 0.45f, 1f); // closer, darker range
+
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final TouchPad touchPad = new TouchPad();
     private final CraftingMenu menu = new CraftingMenu();
@@ -123,20 +132,36 @@ public class GameScreen extends ScreenAdapter {
         boarHitTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         boarVanish = new Animation<>(0.08f, TextureRegion.split(boarHitTex, 48, 32)[0]); // 4-frame poof
 
+        // Parallax background art. Trees are large and drawn shrunk, so use linear
+        // filtering to avoid shimmer. tree2 is the dark silhouette (far layer).
+        skyTex = loadLinear("bg/sky.png");
+        Texture t1 = loadLinear("props/tree1.png");
+        Texture t2 = loadLinear("props/tree2.png");
+        Texture t3 = loadLinear("props/tree3.png");
+        treeFar = new Texture[]{t2};
+        treeNear = new Texture[]{t1, t3};
+        caveRocks = new Texture[]{loadLinear("props/rock1.png"), loadLinear("props/rock2.png"), loadLinear("props/rock3.png")};
+
         finalLevel = (level == 2);
         if (level == 1) {
             bgR = 0.45f; bgG = 0.70f; bgB = 0.86f; // sky
             goalX = 56 * TILE; goalY = 4 * TILE;
             spawnForestPickups();
-            // Two boars on clean flat ground (clear of the plank platforms, or they
+            // Four boars on clean flat ground (clear of the plank platforms, or they
             // would spawn clipping a plank and hang in the air). Each patrols a stretch
             // bounded by pits / the hill / the world edge and turns around on its own.
+            enemies.add(new Enemy(128, 80, true, boarWalk, boarVanish));  // opening stretch
             enemies.add(new Enemy(560, 80, true, boarWalk, boarVanish));  // between the two pits
+            enemies.add(new Enemy(690, 80, false, boarWalk, boarVanish)); // between pit and hill
             enemies.add(new Enemy(832, 80, false, boarWalk, boarVanish)); // past the hill, near the goal
         } else {
             bgR = 0.12f; bgG = 0.10f; bgB = 0.16f; // dark cave
             goalX = 54 * TILE; goalY = 4 * TILE;
             spawnCavePickups();
+            // Three boars on flat cave floor, away from the gaps and plank columns.
+            enemies.add(new Enemy(144, 80, true, boarWalk, boarVanish));  // first hall
+            enemies.add(new Enemy(496, 80, false, boarWalk, boarVanish)); // between the two gaps
+            enemies.add(new Enemy(800, 80, true, boarWalk, boarVanish));  // near the goal
         }
 
         doorTex = new Texture(Gdx.files.internal("props/door.png"));
@@ -145,6 +170,121 @@ public class GameScreen extends ScreenAdapter {
         doorY = 4 * TILE;
 
         Audio.playTheme(level); // forest or cave loop; switches automatically on the level-2 transition
+    }
+
+    private static Texture loadLinear(String path) {
+        Texture t = new Texture(Gdx.files.internal(path));
+        t.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        return t;
+    }
+
+    /**
+     * Draws the parallax backdrop behind the tilemap: a sky and two scrolling tree
+     * layers in the forest, or a dark vertical gradient in the cave. Layers scroll
+     * slower than the camera to give a sense of depth.
+     */
+    private void drawBackground() {
+        float camX = camera.position.x, camY = camera.position.y;
+        if (finalLevel) {
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            shapes.setProjectionMatrix(camera.combined);
+            shapes.begin(ShapeRenderer.ShapeType.Filled);
+            shapes.rect(camX - VIEW_WIDTH / 2f, camY - VIEW_HEIGHT / 2f, VIEW_WIDTH, VIEW_HEIGHT,
+                    caveBottom, caveBottom, caveTop, caveTop);
+            shapes.end();
+            drawCaveDecor(camX, camY);
+            return;
+        }
+        // Sky.
+        game.batch.setProjectionMatrix(camera.combined);
+        game.batch.begin();
+        game.batch.draw(skyTex, camX - VIEW_WIDTH / 2f, camY - VIEW_HEIGHT / 2f, VIEW_WIDTH, VIEW_HEIGHT);
+        game.batch.end();
+
+        // Mountains, behind the trees.
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        shapes.setProjectionMatrix(camera.combined);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        mountainRidge(0.14f, 300f, 210f, 150f, 8 * TILE, mtnFar, camX);
+        mountainRidge(0.24f, 250f, 180f, 116f, 7 * TILE, mtnNear, camX);
+        shapes.end();
+
+        // Tree layers.
+        game.batch.begin();
+        drawTreeRow(treeFar, 0.30f, 140f, 175f, 60f, 0.55f, camX);  // distant, darkened
+        drawTreeRow(treeNear, 0.55f, 175f, 150f, 44f, 1.00f, camX); // nearer, full colour
+        game.batch.setColor(Color.WHITE);
+        game.batch.end();
+    }
+
+    /**
+     * Draws cave background decor: a row of stalagmites rising from the floor and a
+     * row of stalactites hanging from the top of the view, both muted and parallaxed.
+     */
+    private void drawCaveDecor(float camX, float camY) {
+        game.batch.setProjectionMatrix(camera.combined);
+        game.batch.begin();
+        game.batch.setColor(0.50f, 0.52f, 0.60f, 1f); // muted, slightly blue cave stone
+        caveStones(0.50f, 150f, 70f, false, camX, camY); // stalagmites on the floor
+        caveStones(0.42f, 130f, 56f, true, camX, camY);  // stalactites from the ceiling
+        game.batch.setColor(Color.WHITE);
+        game.batch.end();
+    }
+
+    /** One repeating row of cave rocks; ceiling rows are drawn flipped to hang down. */
+    private void caveStones(float p, float spacing, float baseH, boolean ceiling, float camX, float camY) {
+        float half = (VIEW_WIDTH / 2f) / p + spacing;
+        float startA = (float) Math.floor((camX - half) / spacing) * spacing;
+        for (float a = startA; a <= camX + half; a += spacing) {
+            int k = Math.round(a / spacing);
+            Texture t = caveRocks[Math.floorMod(k, caveRocks.length)];
+            float th = baseH * (0.7f + 0.3f * Math.abs((float) Math.sin(k * 1.7f)));
+            float tw = t.getWidth() * (th / t.getHeight());
+            float ax = a * p + camX * (1f - p);
+            if (ceiling) {
+                float topY = camY + VIEW_HEIGHT / 2f;
+                game.batch.draw(t, ax - tw / 2f, topY, tw, -th); // negative height flips it downward
+            } else {
+                game.batch.draw(t, ax - tw / 2f, 44f, tw, th); // base sits below the floor surface
+            }
+        }
+    }
+
+    /** Draws one repeating ridge of overlapping mountain triangles with parallax. */
+    private void mountainRidge(float p, float spacing, float halfW, float peakH, float baseY, Color col, float camX) {
+        shapes.setColor(col);
+        float half = (VIEW_WIDTH / 2f) / p + spacing;
+        float startA = (float) Math.floor((camX - half) / spacing) * spacing;
+        for (float a = startA; a <= camX + half; a += spacing) {
+            int k = Math.round(a / spacing);
+            float vary = 0.72f + 0.28f * Math.abs((float) Math.sin(k * 1.3f)); // uneven peaks
+            float ax = a * p + camX * (1f - p);
+            shapes.triangle(ax - halfW, baseY, ax + halfW, baseY, ax, baseY + peakH * vary);
+        }
+    }
+
+    /**
+     * Draws one repeating row of trees with horizontal parallax.
+     *
+     * @param set     tree textures to cycle through across the row
+     * @param p       parallax factor (smaller = farther/slower)
+     * @param drawH   draw height in world pixels (width keeps aspect)
+     * @param spacing world distance between trees
+     * @param baseY   world y of the tree base (kept low so trunks hide behind the ground)
+     * @param shade   colour multiplier (less than 1 darkens distant trees)
+     */
+    private void drawTreeRow(Texture[] set, float p, float drawH, float spacing, float baseY, float shade, float camX) {
+        game.batch.setColor(shade, shade, shade, 1f);
+        float half = (VIEW_WIDTH / 2f) / p + spacing;
+        float startA = (float) Math.floor((camX - half) / spacing) * spacing;
+        for (float a = startA; a <= camX + half; a += spacing) {
+            int k = Math.round(a / spacing);
+            Texture t = set[Math.floorMod(k, set.length)];
+            float tw = t.getWidth() * (drawH / t.getHeight());
+            float ax = a * p + camX * (1f - p); // parallax: offset from centre scales by p
+            game.batch.draw(t, ax - tw / 2f, baseY, tw, drawH);
+        }
+        game.batch.setColor(Color.WHITE);
     }
 
     private void spawnForestPickups() {
@@ -184,6 +324,7 @@ public class GameScreen extends ScreenAdapter {
 
         ScreenUtils.clear(bgR, bgG, bgB, 1f);
         camera.update();
+        drawBackground();
         mapRenderer.setView(camera);
         mapRenderer.render();
 
@@ -421,6 +562,10 @@ public class GameScreen extends ScreenAdapter {
         doorTex.dispose();
         boarTex.dispose();
         boarHitTex.dispose();
+        skyTex.dispose();
+        for (Texture t : treeFar) t.dispose();
+        for (Texture t : treeNear) t.dispose();
+        for (Texture t : caveRocks) t.dispose();
         shapes.dispose();
     }
 }
