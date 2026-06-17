@@ -7,7 +7,7 @@ listed below. The in-game **Credits** screen (Title → Credits) summarises this
 
 | Asset | Source | License | Attribution required |
 |-------|--------|---------|----------------------|
-| Forest tileset, character sprites, props, boar enemy (`assets/tiles`, `assets/character`, `assets/props`, `assets/enemy`) | anokolisa — "Sidescroller Pixelart Sprites Asset Pack, Forest 16x16" (itch.io) | Free for commercial & non-commercial use | Appreciated, not required |
+| Forest tileset, character sprites, props, boar enemy, background sky + trees (`assets/tiles`, `assets/character`, `assets/props`, `assets/enemy`, `assets/bg`) | anokolisa — "Sidescroller Pixelart Sprites Asset Pack, Forest 16x16" (itch.io) | Free for commercial & non-commercial use | Appreciated, not required |
 
 Pack page: https://anokolisa.itch.io/sidescroller-pixelart-sprites-asset-pack-forest-16x16
 
