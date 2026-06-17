@@ -70,7 +70,7 @@ public class Player implements Disposable {
         idleAnim.setPlayMode(Animation.PlayMode.LOOP);
         runAnim = new Animation<>(0.06f, firstRow(runTex, 80, 80));   // 8 frames
         runAnim.setPlayMode(Animation.PlayMode.LOOP);
-        attackAnim = new Animation<>(ATTACK_TIME / 12f, firstRow(attackTex, 64, 80)); // 12 frames
+        attackAnim = new Animation<>(ATTACK_TIME / 8f, firstRow(attackTex, 96, 80)); // 8 frames of 96x80
 
         TextureRegion[] jumpFrames = firstRow(jumpTex, 64, 64);       // 15 frames
         jumpFrame = jumpFrames[Math.min(4, jumpFrames.length - 1)];
@@ -155,7 +155,8 @@ public class Player implements Disposable {
         TextureRegion frame;
         float frameW, frameH, contentCx, feetFromBottom;
         if (attackTimer > 0) {
-            frame = attackAnim.getKeyFrame(attackStateTime); frameW = 64; frameH = 80; contentCx = 38; feetFromBottom = 18;
+            // 96-wide attack frames: the body is centred at x=48 within the frame.
+            frame = attackAnim.getKeyFrame(attackStateTime); frameW = 96; frameH = 80; contentCx = 48; feetFromBottom = 18;
         } else if (!grounded) {
             frame = jumpFrame; frameW = 64; frameH = 64; contentCx = 21; feetFromBottom = 5;
         } else if (vx != 0) {
@@ -239,7 +240,7 @@ public class Player implements Disposable {
     public boolean getAttackBox(Rectangle out) {
         if (attackTimer <= 0) return false;
         float t = attackStateTime;
-        if (t < ATTACK_TIME * 0.3f || t > ATTACK_TIME * 0.75f) return false; // only the swing's active middle
+        if (t < ATTACK_TIME * 0.4f || t > ATTACK_TIME * 0.85f) return false; // active during the down-slash
         float bx = facingRight ? x + WIDTH : x - ATTACK_REACH;
         out.set(bx, y, ATTACK_REACH, HEIGHT);
         return true;
