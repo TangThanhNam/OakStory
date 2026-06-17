@@ -14,7 +14,7 @@ import com.badlogic.gdx.audio.Sound;
  */
 public final class Audio {
 
-    private static Sound jump, pickup, craft, locked, door, hurt;
+    private static Sound jump, pickup, craft, locked, door, hurt, attack;
     private static Music forestTheme, caveTheme, win, gameOver;
     private static Music current; // the track currently playing, if any
 
@@ -31,6 +31,7 @@ public final class Audio {
         locked = sound("sfx/locked.ogg");
         door = sound("sfx/door.ogg");
         hurt = sound("sfx/hurt.ogg");
+        attack = sound("sfx/attack.ogg");
 
         forestTheme = music("music/theme.ogg");
         caveTheme = music("music/cave_theme.ogg");
@@ -56,6 +57,7 @@ public final class Audio {
     public static void playLocked() { if (locked != null) locked.play(SFX_VOLUME); }
     public static void playDoor()   { if (door != null) door.play(SFX_VOLUME); }
     public static void playHurt()   { if (hurt != null) hurt.play(SFX_VOLUME); }
+    public static void playAttack() { if (attack != null) attack.play(SFX_VOLUME); }
 
     /** Starts the looping theme for the given level (1 = forest, 2 = cave). No-op if already playing. */
     public static void playTheme(int level) { switchTo(level == 1 ? forestTheme : caveTheme); }
@@ -81,11 +83,11 @@ public final class Audio {
 
     /** Releases all audio resources. Call from the game's dispose(). */
     public static void dispose() {
-        Sound[] sounds = {jump, pickup, craft, locked, door, hurt};
+        Sound[] sounds = {jump, pickup, craft, locked, door, hurt, attack};
         for (Sound s : sounds) if (s != null) s.dispose();
         Music[] tracks = {forestTheme, caveTheme, win, gameOver};
         for (Music m : tracks) if (m != null) m.dispose();
-        jump = pickup = craft = locked = door = hurt = null;
+        jump = pickup = craft = locked = door = hurt = attack = null;
         forestTheme = caveTheme = win = gameOver = current = null;
     }
 }
