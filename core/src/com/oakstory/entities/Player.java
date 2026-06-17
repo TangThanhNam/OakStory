@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Disposable;
 
 /**
@@ -26,6 +27,12 @@ public class Player implements Disposable {
     private static final float JUMP_SPEED = 300f;
     private static final float MAX_FALL = 520f;
 
+    /** Combat tuning. */
+    public static final int MAX_HP = 100;
+    private static final float INVULN_TIME = 1.1f;   // i-frames after taking damage
+    private static final float ATTACK_TIME = 0.30f;  // length of one swing (12 frames), kept short and snappy
+    private static final float ATTACK_REACH = 22f;   // how far the swing reaches in front
+
     /** Collision box size in world pixels (smaller than the sprite, which has padding). */
     public static final float WIDTH = 14f;
     public static final float HEIGHT = 30f;
@@ -39,8 +46,13 @@ public class Player implements Disposable {
     private float stateTime;
     private final float worldWidth;
 
-    private final Texture idleTex, runTex, jumpTex;
-    private final Animation<TextureRegion> idleAnim, runAnim;
+    private int hp = MAX_HP;
+    private float invulnTimer;
+    private float attackTimer;     // > 0 while a swing is in progress
+    private float attackStateTime; // drives the attack animation
+
+    private final Texture idleTex, runTex, jumpTex, attackTex;
+    private final Animation<TextureRegion> idleAnim, runAnim, attackAnim;
     private final TextureRegion jumpFrame;
 
     public Player(float spawnX, float spawnY, float worldWidth) {
@@ -51,12 +63,14 @@ public class Player implements Disposable {
         idleTex = new Texture(Gdx.files.internal("character/Idle.png"));
         runTex = new Texture(Gdx.files.internal("character/Run.png"));
         jumpTex = new Texture(Gdx.files.internal("character/Jump.png"));
+        attackTex = new Texture(Gdx.files.internal("character/Attack.png"));
 
         // Note: the sheets use different frame sizes.
         idleAnim = new Animation<>(0.18f, firstRow(idleTex, 64, 80)); // 4 frames
         idleAnim.setPlayMode(Animation.PlayMode.LOOP);
         runAnim = new Animation<>(0.06f, firstRow(runTex, 80, 80));   // 8 frames
         runAnim.setPlayMode(Animation.PlayMode.LOOP);
+        attackAnim = new Animation<>(ATTACK_TIME / 12f, firstRow(attackTex, 64, 80)); // 12 frames
 
         TextureRegion[] jumpFrames = firstRow(jumpTex, 64, 64);       // 15 frames
         jumpFrame = jumpFrames[Math.min(4, jumpFrames.length - 1)];
@@ -79,6 +93,12 @@ public class Player implements Disposable {
      */
     public void update(float dt, TiledMapTileLayer solid, boolean left, boolean right, boolean jump) {
         stateTime += dt;
+        if (invulnTimer > 0) invulnTimer -= dt;
+        if (attackTimer > 0) { attackTimer -= dt; attackStateTime += dt; }
+
+        // The character lunges within the attack frames, so root it horizontally
+        // during a swing; otherwise it appears to slide sideways while attacking.
+        if (attackTimer > 0) { left = false; right = false; }
 
         vx = 0;
         justJumped = false;
@@ -126,12 +146,17 @@ public class Player implements Disposable {
     }
 
     public void render(Batch batch) {
+        // Blink while invulnerable: skip drawing on alternating ~0.1s windows.
+        if (invulnTimer > 0 && ((int) (invulnTimer * 10) & 1) == 0) return;
+
         // Per-state frame size, the character's content-centre x within the frame,
         // and how far the feet sit above the frame bottom. Aligning on the content
         // centre keeps the character from shifting horizontally between states.
         TextureRegion frame;
         float frameW, frameH, contentCx, feetFromBottom;
-        if (!grounded) {
+        if (attackTimer > 0) {
+            frame = attackAnim.getKeyFrame(attackStateTime); frameW = 64; frameH = 80; contentCx = 38; feetFromBottom = 18;
+        } else if (!grounded) {
             frame = jumpFrame; frameW = 64; frameH = 64; contentCx = 21; feetFromBottom = 5;
         } else if (vx != 0) {
             frame = runAnim.getKeyFrame(stateTime); frameW = 80; frameH = 80; contentCx = 44; feetFromBottom = 18;
@@ -156,10 +181,75 @@ public class Player implements Disposable {
         return y;
     }
 
+    /** Current vertical velocity; negative while falling. Used to detect a stomp. */
+    public float getVelocityY() {
+        return vy;
+    }
+
+    /** Moves the player to a position and clears motion (used to respawn after a pit fall). */
+    public void teleport(float nx, float ny) {
+        x = nx;
+        y = ny;
+        vx = vy = 0;
+    }
+
+    /** Gives the player an upward hop, e.g. after stomping an enemy. */
+    public void bounce() {
+        vy = JUMP_SPEED * 0.65f;
+        grounded = false;
+    }
+
+    // --- Combat ----------------------------------------------------------
+
+    public int getHp() { return hp; }
+
+    public boolean isAlive() { return hp > 0; }
+
+    /** True briefly after taking damage; used for the blink and to ignore further hits. */
+    public boolean isInvulnerable() { return invulnTimer > 0; }
+
+    public boolean isAttacking() { return attackTimer > 0; }
+
+    /** Starts a swing if one is not already in progress. */
+    public void startAttack() {
+        if (attackTimer <= 0) {
+            attackTimer = ATTACK_TIME;
+            attackStateTime = 0;
+        }
+    }
+
+    /**
+     * Applies damage, unless the player is still in i-frames from a previous hit.
+     *
+     * @return true if the damage actually landed
+     */
+    public boolean damage(int amount) {
+        if (invulnTimer > 0 || hp <= 0) return false;
+        hp = Math.max(0, hp - amount);
+        invulnTimer = INVULN_TIME;
+        return true;
+    }
+
+    /**
+     * Writes the current attack hitbox into {@code out} when a swing is in its
+     * active window (the middle of the animation).
+     *
+     * @return true if {@code out} now holds a live hitbox
+     */
+    public boolean getAttackBox(Rectangle out) {
+        if (attackTimer <= 0) return false;
+        float t = attackStateTime;
+        if (t < ATTACK_TIME * 0.3f || t > ATTACK_TIME * 0.75f) return false; // only the swing's active middle
+        float bx = facingRight ? x + WIDTH : x - ATTACK_REACH;
+        out.set(bx, y, ATTACK_REACH, HEIGHT);
+        return true;
+    }
+
     @Override
     public void dispose() {
         idleTex.dispose();
         runTex.dispose();
         jumpTex.dispose();
+        attackTex.dispose();
     }
 }

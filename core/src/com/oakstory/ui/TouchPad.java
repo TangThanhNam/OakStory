@@ -35,17 +35,20 @@ public class TouchPad {
 
     private final Button left = new Button(70, 70, 36, "<");
     private final Button right = new Button(165, 70, 36, ">");
-    private final Button jump = new Button(575, 75, 44, "JUMP");
+    private final Button jump = new Button(585, 80, 42, "JUMP");
+    private final Button attack = new Button(495, 60, 38, "ATK");
 
     private boolean jumpWasHeld;
     private boolean jumpJustPressed;
+    private boolean attackWasHeld;
+    private boolean attackJustPressed;
 
     private final Vector3 tmp = new Vector3();
     private final GlyphLayout layout = new GlyphLayout();
 
     /** Reads all active pointers and updates the button states. */
     public void poll(Viewport hudViewport) {
-        left.held = right.held = jump.held = false;
+        left.held = right.held = jump.held = attack.held = false;
         for (int p = 0; p < 6; p++) {
             if (!Gdx.input.isTouched(p)) continue;
             tmp.set(Gdx.input.getX(p), Gdx.input.getY(p), 0);
@@ -53,14 +56,18 @@ public class TouchPad {
             if (left.contains(tmp.x, tmp.y)) left.held = true;
             if (right.contains(tmp.x, tmp.y)) right.held = true;
             if (jump.contains(tmp.x, tmp.y)) jump.held = true;
+            if (attack.contains(tmp.x, tmp.y)) attack.held = true;
         }
         jumpJustPressed = jump.held && !jumpWasHeld;
         jumpWasHeld = jump.held;
+        attackJustPressed = attack.held && !attackWasHeld;
+        attackWasHeld = attack.held;
     }
 
     public boolean left() { return left.held; }
     public boolean right() { return right.held; }
     public boolean jumpJustPressed() { return jumpJustPressed; }
+    public boolean attackJustPressed() { return attackJustPressed; }
 
     /** Draws the translucent button circles (call between ShapeRenderer begin/end is handled here). */
     public void drawButtons(ShapeRenderer shapes) {
@@ -69,6 +76,7 @@ public class TouchPad {
         circle(shapes, left);
         circle(shapes, right);
         circle(shapes, jump);
+        circle(shapes, attack);
         shapes.end();
     }
 
@@ -83,6 +91,7 @@ public class TouchPad {
         label(batch, font, left, 1.4f);
         label(batch, font, right, 1.4f);
         label(batch, font, jump, 0.9f);
+        label(batch, font, attack, 0.9f);
     }
 
     private void label(Batch batch, BitmapFont font, Button b, float scale) {

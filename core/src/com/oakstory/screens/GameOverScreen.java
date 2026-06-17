@@ -11,7 +11,7 @@ import com.oakstory.OakStoryGame;
 import com.oakstory.audio.Audio;
 
 /**
- * Shown when the player runs out of lives. Offers two touch buttons: Retry
+ * Shown when the player runs out of health. Offers two touch buttons: Retry
  * (restart the level that was being played) and Title (back to the start screen).
  */
 public class GameOverScreen extends MenuScreen {
@@ -48,7 +48,7 @@ public class GameOverScreen extends MenuScreen {
         game.batch.setProjectionMatrix(camera.combined);
         game.batch.begin();
         drawCentered("Game Over", OakStoryGame.WORLD_HEIGHT * 0.70f, 2.5f);
-        drawCentered("You ran out of lives.", OakStoryGame.WORLD_HEIGHT * 0.56f, 0.9f);
+        drawCentered("You ran out of health.", OakStoryGame.WORLD_HEIGHT * 0.56f, 0.9f);
         drawCenteredAt("Retry", retryBtn.x + retryBtn.width / 2f, retryBtn.y + retryBtn.height / 2f, 1.3f);
         drawCenteredAt("Title", titleBtn.x + titleBtn.width / 2f, titleBtn.y + titleBtn.height / 2f, 1.1f);
         game.batch.end();

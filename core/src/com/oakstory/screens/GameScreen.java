@@ -6,6 +6,7 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -22,6 +23,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.oakstory.OakStoryGame;
 import com.oakstory.audio.Audio;
+import com.oakstory.entities.Enemy;
 import com.oakstory.entities.Player;
 import com.oakstory.items.Icons;
 import com.oakstory.items.Inventory;
@@ -46,7 +48,8 @@ public class GameScreen extends ScreenAdapter {
     private static final int CHEST_GID = 444; // top-left tile of the 2x2 chest
     private static final float CHEST_SIZE = 32f;
     private static final float DOOR_W = 31f, DOOR_H = 47f;
-    private static final int START_LIVES = 3;
+    private static final int CONTACT_DMG = 25; // health lost from a boar touch or a pit fall
+    private static final int ATTACK_DMG = 1;   // damage a stomp or swing deals to a boar
 
     private final OakStoryGame game;
     private final int level;
@@ -67,6 +70,9 @@ public class GameScreen extends ScreenAdapter {
     private final Icons icons;
     private final Inventory inventory = new Inventory();
     private final Array<Pickup> pickups = new Array<>();
+    private final Array<Enemy> enemies = new Array<>();
+    private final Texture boarTex, boarHitTex;
+    private final Animation<TextureRegion> boarWalk, boarVanish;
     private final TextureRegion chest;
 
     private final ShapeRenderer shapes = new ShapeRenderer();
@@ -84,7 +90,7 @@ public class GameScreen extends ScreenAdapter {
     private boolean chestOpened;
     private boolean showKeyHint;
     private boolean lockedSoundPlayed; // so the "locked" sound fires once per visit, not every frame
-    private int lives = START_LIVES;
+    private final Rectangle attackBox = new Rectangle();
 
     public GameScreen(OakStoryGame game, int level) {
         this.game = game;
@@ -108,11 +114,25 @@ public class GameScreen extends ScreenAdapter {
         icons = new Icons();
         chest = icons.block(CHEST_GID, 2, 2);
 
+        // Boar enemy: a single shared 48x32, 6-frame walk animation reused by every boar.
+        boarTex = new Texture(Gdx.files.internal("enemy/boar_walk.png"));
+        boarTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        boarWalk = new Animation<>(0.12f, TextureRegion.split(boarTex, 48, 32)[0]);
+        boarWalk.setPlayMode(Animation.PlayMode.LOOP);
+        boarHitTex = new Texture(Gdx.files.internal("enemy/boar_hit.png"));
+        boarHitTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        boarVanish = new Animation<>(0.08f, TextureRegion.split(boarHitTex, 48, 32)[0]); // 4-frame poof
+
         finalLevel = (level == 2);
         if (level == 1) {
             bgR = 0.45f; bgG = 0.70f; bgB = 0.86f; // sky
             goalX = 56 * TILE; goalY = 4 * TILE;
             spawnForestPickups();
+            // Two boars on clean flat ground (clear of the plank platforms, or they
+            // would spawn clipping a plank and hang in the air). Each patrols a stretch
+            // bounded by pits / the hill / the world edge and turns around on its own.
+            enemies.add(new Enemy(560, 80, true, boarWalk, boarVanish));  // between the two pits
+            enemies.add(new Enemy(832, 80, false, boarWalk, boarVanish)); // past the hill, near the goal
         } else {
             bgR = 0.12f; bgG = 0.10f; bgB = 0.16f; // dark cave
             goalX = 54 * TILE; goalY = 4 * TILE;
@@ -175,6 +195,7 @@ public class GameScreen extends ScreenAdapter {
         }
         game.batch.draw(chest, goalX, goalY, CHEST_SIZE, CHEST_SIZE);
         if (chestOpened && !finalLevel) game.batch.draw(doorTex, doorX, doorY, DOOR_W, DOOR_H);
+        for (Enemy e : enemies) e.render(game.batch);
         player.render(game.batch);
         game.batch.end();
 
@@ -188,6 +209,7 @@ public class GameScreen extends ScreenAdapter {
         } else {
             touchPad.drawButtons(shapes);
             drawCraftButtonBg();
+            drawHpBar();
             game.batch.begin();
             drawHud();
             touchPad.drawLabels(game.batch, game.font);
@@ -221,6 +243,14 @@ public class GameScreen extends ScreenAdapter {
         left |= touchPad.left();
         right |= touchPad.right();
         jump |= touchPad.jumpJustPressed();
+
+        boolean attackPressed = touchPad.attackJustPressed()
+                || Gdx.input.isKeyJustPressed(Input.Keys.J)
+                || Gdx.input.isKeyJustPressed(Input.Keys.X);
+        if (attackPressed && !player.isAttacking()) {
+            player.startAttack();
+            Audio.playAttack();
+        }
 
         if (Gdx.input.justTouched()) {
             tmp.set(Gdx.input.getX(), Gdx.input.getY(), 0);
@@ -269,24 +299,56 @@ public class GameScreen extends ScreenAdapter {
             return true;
         }
 
-        // Falling into a pit costs a life. At zero lives the run ends.
-        if (player.getFeetY() < -Player.HEIGHT) {
-            Audio.playHurt();
-            lives--;
-            if (lives <= 0) {
-                Audio.playGameOver();
-                game.setScreen(new GameOverScreen(game, level));
-                dispose();
-                return true;
+        // Boars: patrol, then resolve combat with the player. A live boar can be hit
+        // by the attack swing or stomped from above; touching it otherwise hurts the
+        // player (whose own i-frames stop repeated hits from draining health at once).
+        boolean swinging = player.getAttackBox(attackBox);
+        for (Enemy e : enemies) {
+            e.update(delta, groundLayer);
+            if (!e.isAlive()) continue;
+
+            if (swinging && overlaps(attackBox.x, attackBox.y, attackBox.width, attackBox.height,
+                    e.x, e.y, Enemy.WIDTH, Enemy.HEIGHT)) {
+                e.hit(ATTACK_DMG);
+                continue;
             }
-            player.x = spawnX;
-            player.y = spawnY;
+            if (!overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, e.x, e.y, Enemy.WIDTH, Enemy.HEIGHT)) continue;
+
+            boolean stomp = player.getVelocityY() < 0 && player.getFeetY() >= e.y + Enemy.HEIGHT - 8f;
+            if (stomp) {
+                e.hit(ATTACK_DMG);
+                player.bounce();
+                Audio.playJump();
+            } else if (!player.isAttacking()) {
+                hurtPlayer(CONTACT_DMG);
+            }
+        }
+
+        // Falling into a pit hurts the player and resets them to the level start.
+        if (player.getFeetY() < -Player.HEIGHT) {
+            hurtPlayer(CONTACT_DMG);
+            player.teleport(spawnX, spawnY);
+        }
+
+        // Out of health: end the run.
+        if (!player.isAlive()) {
+            Audio.playGameOver();
+            game.setScreen(new GameOverScreen(game, level));
+            dispose();
+            return true;
         }
 
         float camX = MathUtils.clamp(player.x, VIEW_WIDTH / 2f, mapWidthPx - VIEW_WIDTH / 2f);
         float camY = MathUtils.clamp(player.y, VIEW_HEIGHT / 2f, mapHeightPx - VIEW_HEIGHT / 2f);
         camera.position.set(camX, camY, 0);
         return false;
+    }
+
+    /** Applies damage to the player and plays the hurt sound only if it actually landed. */
+    private void hurtPlayer(int amount) {
+        if (player.damage(amount)) {
+            Audio.playHurt();
+        }
     }
 
     private void drawHud() {
@@ -300,11 +362,21 @@ public class GameScreen extends ScreenAdapter {
         if (inventory.hasKey()) {
             game.batch.draw(icons.get(KEY_ICON_GID), x, y, iconSize, iconSize);
         }
+    }
 
-        // Lives, shown top-centre so they stay clear of the resource and CRAFT HUD.
-        game.font.getData().setScale(1.0f);
-        layout.setText(game.font, "Lives x" + lives);
-        game.font.draw(game.batch, "Lives x" + lives, VIEW_WIDTH / 2f - layout.width / 2f, VIEW_HEIGHT - 8);
+    /** Background + green fill health bar, drawn top-centre. Expects no active batch/shapes. */
+    private void drawHpBar() {
+        float w = 140, h = 12, bx = VIEW_WIDTH / 2f - w / 2f, by = VIEW_HEIGHT - 18;
+        float frac = player.getHp() / (float) Player.MAX_HP;
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0f, 0f, 0f, 0.55f);
+        shapes.rect(bx - 2, by - 2, w + 4, h + 4);
+        shapes.setColor(0.45f, 0.12f, 0.12f, 1f);
+        shapes.rect(bx, by, w, h);
+        shapes.setColor(0.30f, 0.78f, 0.30f, 1f);
+        shapes.rect(bx, by, w * frac, h);
+        shapes.end();
     }
 
     private void drawCenteredHud(String text, float y) {
@@ -347,6 +419,8 @@ public class GameScreen extends ScreenAdapter {
         player.dispose();
         icons.dispose();
         doorTex.dispose();
+        boarTex.dispose();
+        boarHitTex.dispose();
         shapes.dispose();
     }
 }
