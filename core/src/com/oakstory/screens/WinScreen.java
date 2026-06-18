@@ -28,7 +28,7 @@ public class WinScreen extends MenuScreen {
         game.batch.begin();
         float h = OakStoryGame.WORLD_HEIGHT;
         drawCentered("You Win!", h * 0.62f, 2.5f);
-        drawCentered("You found the treasure in the cave.", h * 0.45f, 0.9f);
+        drawCentered("You defeated the giant snail boss!", h * 0.45f, 0.9f);
         drawCentered("Tap anywhere to return to the title", h * 0.25f, 0.9f);
         game.batch.end();
     }

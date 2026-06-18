@@ -24,6 +24,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.oakstory.OakStoryGame;
 import com.oakstory.audio.Audio;
+import com.oakstory.entities.Boss;
 import com.oakstory.entities.Enemy;
 import com.oakstory.entities.Player;
 import com.oakstory.items.Icons;
@@ -93,13 +94,19 @@ public class GameScreen extends ScreenAdapter {
 
     private final float bgR, bgG, bgB;
     private final float goalX, goalY;
-    private final boolean finalLevel;
+    private final boolean caveStyle;  // dark cave background (levels 2 and 3)
+    private final boolean hasChest;   // a key-gated chest goal (level 1 only)
+    private final boolean bossLevel;  // the boss arena (level 3)
+    private final int nextLevel;      // level the door leads to (-1 if none)
     private final Texture doorTex;
     private final float doorX, doorY;
     private boolean chestOpened;
     private boolean showKeyHint;
     private boolean lockedSoundPlayed; // so the "locked" sound fires once per visit, not every frame
     private final Rectangle attackBox = new Rectangle();
+
+    private final Texture snailWalkTex, snailHideTex, snailDeadTex;
+    private Boss boss; // only on the boss level
 
     public GameScreen(OakStoryGame game, int level) {
         this.game = game;
@@ -110,7 +117,8 @@ public class GameScreen extends ScreenAdapter {
         hudCamera = new OrthographicCamera();
         hudViewport = new FitViewport(VIEW_WIDTH, VIEW_HEIGHT, hudCamera);
 
-        map = new TmxMapLoader().load(level == 1 ? "maps/forest.tmx" : "maps/cave.tmx");
+        String mapFile = level == 1 ? "maps/forest.tmx" : level == 2 ? "maps/cave.tmx" : "maps/boss.tmx";
+        map = new TmxMapLoader().load(mapFile);
         mapRenderer = new OrthogonalTiledMapRenderer(map, game.batch);
         groundLayer = (TiledMapTileLayer) map.getLayers().get("ground");
         mapWidthPx = groundLayer.getWidth() * TILE;
@@ -132,6 +140,14 @@ public class GameScreen extends ScreenAdapter {
         boarHitTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         boarVanish = new Animation<>(0.08f, TextureRegion.split(boarHitTex, 48, 32)[0]); // 4-frame poof
 
+        // Boss snail: 48x32, 8-frame walk and death sheets, drawn enlarged.
+        snailWalkTex = new Texture(Gdx.files.internal("enemy/snail_walk.png"));
+        snailWalkTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        snailHideTex = new Texture(Gdx.files.internal("enemy/snail_hide.png"));
+        snailHideTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        snailDeadTex = new Texture(Gdx.files.internal("enemy/snail_dead.png"));
+        snailDeadTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+
         // Parallax background art. Trees are large and drawn shrunk, so use linear
         // filtering to avoid shimmer. tree2 is the dark silhouette (far layer).
         skyTex = loadLinear("bg/sky.png");
@@ -142,7 +158,10 @@ public class GameScreen extends ScreenAdapter {
         treeNear = new Texture[]{t1, t3};
         caveRocks = new Texture[]{loadLinear("props/rock1.png"), loadLinear("props/rock2.png"), loadLinear("props/rock3.png")};
 
-        finalLevel = (level == 2);
+        caveStyle = (level >= 2);
+        hasChest = (level == 1);
+        bossLevel = (level == 3);
+        nextLevel = (level < 3) ? level + 1 : -1;
         if (level == 1) {
             bgR = 0.45f; bgG = 0.70f; bgB = 0.86f; // sky
             goalX = 56 * TILE; goalY = 4 * TILE;
@@ -154,7 +173,7 @@ public class GameScreen extends ScreenAdapter {
             enemies.add(new Enemy(560, 80, true, boarWalk, boarVanish));  // between the two pits
             enemies.add(new Enemy(690, 80, false, boarWalk, boarVanish)); // between pit and hill
             enemies.add(new Enemy(832, 80, false, boarWalk, boarVanish)); // past the hill, near the goal
-        } else {
+        } else if (level == 2) {
             bgR = 0.12f; bgG = 0.10f; bgB = 0.16f; // dark cave
             goalX = 54 * TILE; goalY = 4 * TILE;
             spawnCavePickups();
@@ -162,14 +181,24 @@ public class GameScreen extends ScreenAdapter {
             enemies.add(new Enemy(144, 80, true, boarWalk, boarVanish));  // first hall
             enemies.add(new Enemy(496, 80, false, boarWalk, boarVanish)); // between the two gaps
             enemies.add(new Enemy(800, 80, true, boarWalk, boarVanish));  // near the goal
+        } else {
+            bgR = 0.10f; bgG = 0.08f; bgB = 0.13f; // boss cavern
+            goalX = 0; goalY = 0; // no chest/door in the boss room
+            Animation<TextureRegion> snailWalk = new Animation<>(0.10f, TextureRegion.split(snailWalkTex, 48, 32)[0]);
+            snailWalk.setPlayMode(Animation.PlayMode.LOOP);
+            Animation<TextureRegion> snailHide = new Animation<>(0.9f / 8f, TextureRegion.split(snailHideTex, 48, 32)[0]);
+            Animation<TextureRegion> snailDead = new Animation<>(0.09f, TextureRegion.split(snailDeadTex, 48, 32)[0]);
+            boss = new Boss(620, 120, snailWalk, snailHide, snailDead);
         }
 
         doorTex = new Texture(Gdx.files.internal("props/door.png"));
         doorTex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        doorX = goalX + 36;
+        // Level 1's door appears next to the chest once unlocked; level 2's door is the
+        // open exit at the goal. The boss level has no door.
+        doorX = hasChest ? goalX + 36 : goalX;
         doorY = 4 * TILE;
 
-        Audio.playTheme(level); // forest or cave loop; switches automatically on the level-2 transition
+        Audio.playTheme(level); // forest (1) or cave (2,3) loop; switches automatically on transitions
     }
 
     private static Texture loadLinear(String path) {
@@ -185,7 +214,7 @@ public class GameScreen extends ScreenAdapter {
      */
     private void drawBackground() {
         float camX = camera.position.x, camY = camera.position.y;
-        if (finalLevel) {
+        if (caveStyle) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             shapes.setProjectionMatrix(camera.combined);
             shapes.begin(ShapeRenderer.ShapeType.Filled);
@@ -334,9 +363,10 @@ public class GameScreen extends ScreenAdapter {
         for (Pickup p : pickups) {
             if (!p.collected) game.batch.draw(icons.get(p.type.gid), p.x, p.y, Pickup.SIZE, Pickup.SIZE);
         }
-        game.batch.draw(chest, goalX, goalY, CHEST_SIZE, CHEST_SIZE);
-        if (chestOpened && !finalLevel) game.batch.draw(doorTex, doorX, doorY, DOOR_W, DOOR_H);
+        if (hasChest) game.batch.draw(chest, goalX, goalY, CHEST_SIZE, CHEST_SIZE);
+        if (doorVisible()) game.batch.draw(doorTex, doorX, doorY, DOOR_W, DOOR_H);
         for (Enemy e : enemies) e.render(game.batch);
+        if (boss != null) boss.render(game.batch);
         player.render(game.batch);
         game.batch.end();
 
@@ -351,12 +381,14 @@ public class GameScreen extends ScreenAdapter {
             touchPad.drawButtons(shapes);
             drawCraftButtonBg();
             drawHpBar();
+            if (boss != null) drawBossBar();
             game.batch.begin();
             drawHud();
             touchPad.drawLabels(game.batch, game.font);
             drawCraftButtonLabel();
             if (showKeyHint) drawCenteredHud("Locked!  Craft a Key first.", VIEW_HEIGHT - 44);
-            else if (chestOpened && !finalLevel) drawCenteredHud("The door is open!  Walk into it.", VIEW_HEIGHT - 44);
+            else if (doorVisible()) drawCenteredHud("The door is open!  Walk into it.", VIEW_HEIGHT - 44);
+            if (boss != null) drawCenteredHud("BOSS", 40);
             game.batch.end();
         }
     }
@@ -411,33 +443,28 @@ public class GameScreen extends ScreenAdapter {
             }
         }
 
-        // Goal: a chest. On the final level it ends the game; otherwise opening it
-        // (with the Key) reveals a door the player then walks into to descend.
+        // Goal. Level 1: a key-gated chest reveals a door to the cave. Level 2: an
+        // open door to the boss room. Level 3 (boss): no door - win by defeating it.
         showKeyHint = false;
-        boolean atChest = overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, goalX, goalY, CHEST_SIZE, CHEST_SIZE);
-        if (finalLevel) {
-            if (atChest) {
-                Audio.playWin();
-                game.setScreen(new WinScreen(game));
+        if (!bossLevel) {
+            boolean atChest = hasChest && overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, goalX, goalY, CHEST_SIZE, CHEST_SIZE);
+            if (hasChest && !chestOpened) {
+                if (atChest) {
+                    if (inventory.hasKey()) {
+                        chestOpened = true;
+                        Audio.playDoor();
+                    } else {
+                        showKeyHint = true;
+                        if (!lockedSoundPlayed) { Audio.playLocked(); lockedSoundPlayed = true; }
+                    }
+                } else {
+                    lockedSoundPlayed = false; // re-arm once the player steps away from the chest
+                }
+            } else if (overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, doorX, doorY, DOOR_W, DOOR_H)) {
+                game.setScreen(new GameScreen(game, nextLevel));
                 dispose();
                 return true;
             }
-        } else if (!chestOpened) {
-            if (atChest) {
-                if (inventory.hasKey()) {
-                    chestOpened = true;
-                    Audio.playDoor();
-                } else {
-                    showKeyHint = true;
-                    if (!lockedSoundPlayed) { Audio.playLocked(); lockedSoundPlayed = true; }
-                }
-            } else {
-                lockedSoundPlayed = false; // re-arm once the player steps away from the chest
-            }
-        } else if (overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT, doorX, doorY, DOOR_W, DOOR_H)) {
-            game.setScreen(new GameScreen(game, 2));
-            dispose();
-            return true;
         }
 
         // Boars: patrol, then resolve combat with the player. A live boar can be hit
@@ -462,6 +489,35 @@ public class GameScreen extends ScreenAdapter {
                 Audio.playJump();
             } else if (!player.isAttacking()) {
                 hurtPlayer(CONTACT_DMG);
+            }
+        }
+
+        // Boss fight (level 3): the snail chases the player; attacks and stomps wear
+        // down its health, contact hurts the player, and its defeat wins the game.
+        if (boss != null) {
+            boss.update(delta, groundLayer, player.x + Player.WIDTH / 2f);
+            if (boss.isAlive()) {
+                boolean overlap = overlaps(player.x, player.y, Player.WIDTH, Player.HEIGHT,
+                        boss.x, boss.y, Boss.WIDTH, Boss.HEIGHT);
+                // The player wears the boss down with attacks and stomps at any time.
+                if (swinging && overlaps(attackBox.x, attackBox.y, attackBox.width, attackBox.height,
+                        boss.x, boss.y, Boss.WIDTH, Boss.HEIGHT)) {
+                    boss.hit(ATTACK_DMG);
+                } else if (overlap && player.getVelocityY() < 0 && player.getFeetY() >= boss.y + Boss.HEIGHT - 10f) {
+                    boss.hit(ATTACK_DMG);
+                    player.bounce();
+                    Audio.playJump();
+                }
+                // The boss only hurts the player during its stationary strike window.
+                if (boss.isStriking() && overlap) {
+                    hurtPlayer(CONTACT_DMG);
+                }
+            }
+            if (boss.isDefeated()) {
+                Audio.playWin();
+                game.setScreen(new WinScreen(game));
+                dispose();
+                return true;
             }
         }
 
@@ -503,6 +559,26 @@ public class GameScreen extends ScreenAdapter {
         if (inventory.hasKey()) {
             game.batch.draw(icons.get(KEY_ICON_GID), x, y, iconSize, iconSize);
         }
+    }
+
+    /** Whether the exit door should be shown/active: level 2 always, level 1 once unlocked. */
+    private boolean doorVisible() {
+        return !bossLevel && (!hasChest || chestOpened);
+    }
+
+    /** Boss health bar, drawn wide across the bottom-centre of the screen. */
+    private void drawBossBar() {
+        float w = 360, h = 14, bx = VIEW_WIDTH / 2f - w / 2f, by = 22;
+        float frac = Math.max(0f, boss.getHp() / (float) Boss.MAX_HP);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0f, 0f, 0f, 0.6f);
+        shapes.rect(bx - 2, by - 2, w + 4, h + 4);
+        shapes.setColor(0.30f, 0.06f, 0.06f, 1f);
+        shapes.rect(bx, by, w, h);
+        shapes.setColor(0.85f, 0.20f, 0.16f, 1f);
+        shapes.rect(bx, by, w * frac, h);
+        shapes.end();
     }
 
     /** Background + green fill health bar, drawn top-centre. Expects no active batch/shapes. */
@@ -562,6 +638,9 @@ public class GameScreen extends ScreenAdapter {
         doorTex.dispose();
         boarTex.dispose();
         boarHitTex.dispose();
+        snailWalkTex.dispose();
+        snailHideTex.dispose();
+        snailDeadTex.dispose();
         skyTex.dispose();
         for (Texture t : treeFar) t.dispose();
         for (Texture t : treeNear) t.dispose();
